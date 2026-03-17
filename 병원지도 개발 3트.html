@@ -1,80 +1,38 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>전국 종합병원 실시간 지도</title>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <style>
-        #map { height: 90vh; width: 100%; }
-        body { margin: 0; font-family: 'Malgun Gothic', sans-serif; }
-        .header { padding: 15px; background: #004a95; color: white; text-align: center; font-weight: bold; }
-        .loading-msg { font-size: 12px; color: #ffeb3b; display: block; margin-top: 5px; }
-    </style>
-</head>
-<body>
-    <div class="header">
-        🏥 전국 종합병원 실시간 위치 지도
-        <span id="status" class="loading-msg">데이터를 불러오는 중...</span>
-    </div>
-    <div id="map"></div>
-
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script>
-        // 1. 지도 초기화
-        const map = L.map('map').setView([36.5, 127.5], 7);
-
-        // 2. 배경 지도 설정 (안전한 CartoDB 타일)
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-            attribution: '&copy; OpenStreetMap'
-        }).addTo(map);
-
-        async function loadHospitals() {
-            // ⭐ [중요] 여기에 선민이의 개인 API 인증키를 붙여넣으세요!
-            const rawKey = '2016f36910df036929379edb9f10c17d0030f48c2654157a7c0e8fb6f0ad373a'; 
-            
-            const SERVICE_KEY = decodeURIComponent(rawKey); 
+async function loadHospitals() {
+            // 1. 발급받은 키를 여기에 넣으세요. (특수문자가 없어서 그대로 넣어도 무방!)
+            const SERVICE_KEY = '2016f36910df036929379edb9f10c17d0030f48c2654157a7c0e8fb6f0ad373a'; 
             const statusEl = document.getElementById('status');
             
-            // 정부 API 원본 주소
-            const targetUrl = `http://apis.data.go.kr/B551182/hospInfoService/getHospBasisList?serviceKey=${SERVICE_KEY}&_type=json&numOfRows=100&clCd=01`;
-            
-            // 🚀 보안 차단(CORS)을 피하기 위한 우회 도로 설정
+            // 2. 상세 페이지에 적힌 최신 v2 주소를 반영했어!
+            const targetUrl = `https://apis.data.go.kr/B551182/hospInfoServicev2/getHospBasisList?serviceKey=${SERVICE_KEY}&_type=json&numOfRows=100&clCd=01`;
             const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`;
 
             try {
                 const response = await fetch(proxyUrl);
                 const data = await response.json();
-                
-                // 우회 서버를 거친 데이터는 contents 안에 문자열로 들어있어서 변환이 필요해
                 const result = JSON.parse(data.contents);
                 
                 if(!result.response.body.items || !result.response.body.items.item) {
-                    statusEl.innerText = "❌ 키 승인 대기 중이거나 데이터가 없습니다.";
+                    statusEl.innerText = "❌ 데이터가 없습니다. (키 승인 대기 중일 수 있음)";
                     return;
                 }
 
                 const items = result.response.body.items.item;
-                
-                // 데이터가 한 개일 때와 여러 개일 때를 모두 처리
                 const hospitalList = Array.isArray(items) ? items : [items];
 
                 hospitalList.forEach(hosp => {
-                    if(hosp.YPos && hosp.XPos) {
-                        L.marker([hosp.YPos, hosp.XPos])
-                         .addTo(map)
-                         .bindPopup(`<b>${hosp.yadmNm}</b><br>${hosp.addr}<br>📞 ${hosp.telno}`);
+                    // v2에서는 위도/경도 이름이 바뀔 수도 있어서 체크해줄게
+                    const lat = hosp.YPos || hosp.yPos;
+                    const lon = hosp.XPos || hosp.xPos;
+                    if(lat && lon) {
+                        L.marker([lat, lon]).addTo(map)
+                         .bindPopup(`<b>${hosp.yadmNm}</b><br>${hosp.addr}`);
                     }
                 });
 
-                statusEl.innerText = `✅ 성공: ${hospitalList.length}개의 종합병원을 찾았습니다.`;
-                
+                statusEl.innerText = `✅ 성공: ${hospitalList.length}개의 종합병원을 찾았습니다!`;
             } catch (error) {
-                console.error("오류 상세:", error);
-                statusEl.innerText = "❌ 오류 발생 (콘솔 창을 확인하세요)";
+                statusEl.innerText = "❌ 키가 등록되지 않았거나 서버 오류입니다.";
+                console.error(error);
             }
         }
-
-        loadHospitals();
-    </script>
-</body>
-</html>
